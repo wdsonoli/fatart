@@ -1,0 +1,8 @@
+{
+  "name": "FatiArt Studio",
+  "description": "Divida qualquer imagem em múltiplas folhas A4 ou Carta para imprimir pôsteres gigantes, murais escolares e stencils de tatuagem com sobreposição e guias de corte.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

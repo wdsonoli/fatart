@@ -28,6 +28,7 @@ export type Orientation = 'auto' | 'portrait' | 'landscape';
 export type SizingMode = 'proportional_sheets' | 'physical' | 'free_grid';
 export type SheetAxis = 'cols' | 'rows';
 export type PhysicalUnit = 'cm' | 'm';
+export type PanelShape = 'rect' | 'round';
 
 export type PaperColorProfileId =
   | 'none'
@@ -98,6 +99,8 @@ export interface PosterSettings {
   showPageNumbers: boolean;
   includeAssemblyMap: boolean;
   skipBlankPages: boolean;
+  panelShape: PanelShape;
+  roundDiameterCm: number;
 }
 
 export interface TileSlice {
@@ -137,6 +140,9 @@ export interface PosterLayout {
   imgHMm: number;
   estimatedDpi: number;
   tiles: TileSlice[];
+  circleCenterXMm?: number;
+  circleCenterYMm?: number;
+  circleRadiusMm?: number;
 }
 
 export interface SampleArtwork {

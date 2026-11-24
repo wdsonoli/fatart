@@ -91,6 +91,8 @@ const INITIAL_SETTINGS: PosterSettings = {
   showPageNumbers: true,
   includeAssemblyMap: true,
   skipBlankPages: true,
+  panelShape: 'rect',
+  roundDiameterCm: 50,
 };
 
 export default function App() {

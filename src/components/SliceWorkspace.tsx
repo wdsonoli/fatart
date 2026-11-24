@@ -53,6 +53,11 @@ import {
   PAPER_CATALOG,
 } from '../utils/posterMath';
 import { ArtworkPreview } from './ArtworkPreview';
+import {
+  InteractiveRulerOverlay,
+  RulerCoords,
+  RulerShape,
+} from './InteractiveRulerOverlay';
 import { PdfPreviewModal } from './PdfPreviewModal';
 import { TilePreviewModal } from './TilePreviewModal';
 
@@ -76,7 +81,6 @@ interface SliceWorkspaceProps {
   onDownloadPdf: () => void;
 }
 
-type RulerShape = 'line' | 'rect';
 type AccordionSection =
   | 'division'
   | 'paper'
@@ -89,18 +93,7 @@ type AccordionSection =
   | 'color'
   | 'stencil';
 
-interface RulerCoords {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-}
-
 const PROFILES_STORAGE_KEY = 'fatiart_calibration_profiles_v1';
-
-function formatCm(val: number): string {
-  return `${val.toFixed(1).replace('.', ',')} cm`;
-}
 
 export const SliceWorkspace: React.FC<SliceWorkspaceProps> = ({
   samples,
@@ -267,205 +260,12 @@ export const SliceWorkspace: React.FC<SliceWorkspaceProps> = ({
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
-
-  // Ruler pointer interactions
-  const getSurfacePct = (clientX: number, clientY: number) => {
-    const el = gridSurfaceRef.current;
-    if (!el) return { x: 50, y: 50 };
-    const rect = el.getBoundingClientRect();
-    const x = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
-    const y = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100));
-    return { x, y };
-  };
-
-  const handleRulerSurfacePointerDown = (e: React.PointerEvent) => {
-    if (!rulerEnabled || !layout) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const start = getSurfacePct(e.clientX, e.clientY);
-    setHasCustomRuler(true);
-
-    if (rulerShape === 'line') {
-      setLineCoords({ x1: start.x, y1: start.y, x2: start.x, y2: start.y });
-    } else {
-      setRectCoords({ x1: start.x, y1: start.y, x2: start.x, y2: start.y });
-    }
-
-    const onMove = (ev: PointerEvent) => {
-      const curr = getSurfacePct(ev.clientX, ev.clientY);
-      if (rulerShape === 'line') {
-        let nx = curr.x;
-        let ny = curr.y;
-        if (ev.shiftKey) {
-          const dxPx = ((nx - start.x) / 100) * layout.totalGridWMm;
-          const dyPx = ((ny - start.y) / 100) * layout.totalGridHMm;
-          if (Math.abs(dxPx) > Math.abs(dyPx) * 2) ny = start.y;
-          else if (Math.abs(dyPx) > Math.abs(dxPx) * 2) nx = start.x;
-        }
-        setLineCoords({ x1: start.x, y1: start.y, x2: nx, y2: ny });
-      } else {
-        let nx = curr.x;
-        let ny = curr.y;
-        if (ev.shiftKey) {
-          const dxMm = ((nx - start.x) / 100) * layout.totalGridWMm;
-          const dyMm = ((ny - start.y) / 100) * layout.totalGridHMm;
-          const sideMm = Math.max(Math.abs(dxMm), Math.abs(dyMm));
-          nx = start.x + (Math.sign(dxMm || 1) * sideMm * 100) / layout.totalGridWMm;
-          ny = start.y + (Math.sign(dyMm || 1) * sideMm * 100) / layout.totalGridHMm;
-          nx = Math.max(0, Math.min(100, nx));
-          ny = Math.max(0, Math.min(100, ny));
-        }
-        setRectCoords({ x1: start.x, y1: start.y, x2: nx, y2: ny });
-      }
-    };
-
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  };
-
-  const handleLineHandlePointerDown = (
-    e: React.PointerEvent,
-    handle: 'start' | 'end'
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!layout) return;
-
-    const onMove = (ev: PointerEvent) => {
-      const curr = getSurfacePct(ev.clientX, ev.clientY);
-      setLineCoords((prev) => {
-        const anchor =
-          handle === 'start' ? { x: prev.x2, y: prev.y2 } : { x: prev.x1, y: prev.y1 };
-        let nx = curr.x;
-        let ny = curr.y;
-        if (ev.shiftKey) {
-          const dxMm = ((nx - anchor.x) / 100) * layout.totalGridWMm;
-          const dyMm = ((ny - anchor.y) / 100) * layout.totalGridHMm;
-          if (Math.abs(dxMm) > Math.abs(dyMm) * 2) ny = anchor.y;
-          else if (Math.abs(dyMm) > Math.abs(dxMm) * 2) nx = anchor.x;
-        }
-        return handle === 'start'
-          ? { ...prev, x1: nx, y1: ny }
-          : { ...prev, x2: nx, y2: ny };
-      });
-    };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  };
-
-  const handleRectCornerPointerDown = (
-    e: React.PointerEvent,
-    corner: 'nw' | 'ne' | 'sw' | 'se'
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!layout) return;
-
-    const minX = Math.min(rectCoords.x1, rectCoords.x2);
-    const maxX = Math.max(rectCoords.x1, rectCoords.x2);
-    const minY = Math.min(rectCoords.y1, rectCoords.y2);
-    const maxY = Math.max(rectCoords.y1, rectCoords.y2);
-
-    const anchorX = corner === 'nw' || corner === 'sw' ? maxX : minX;
-    const anchorY = corner === 'nw' || corner === 'ne' ? maxY : minY;
-
-    const onMove = (ev: PointerEvent) => {
-      const curr = getSurfacePct(ev.clientX, ev.clientY);
-      let nx = curr.x;
-      let ny = curr.y;
-      if (ev.shiftKey) {
-        const dxMm = ((nx - anchorX) / 100) * layout.totalGridWMm;
-        const dyMm = ((ny - anchorY) / 100) * layout.totalGridHMm;
-        const sideMm = Math.max(Math.abs(dxMm), Math.abs(dyMm));
-        nx = anchorX + (Math.sign(dxMm || 1) * sideMm * 100) / layout.totalGridWMm;
-        ny = anchorY + (Math.sign(dyMm || 1) * sideMm * 100) / layout.totalGridHMm;
-        nx = Math.max(0, Math.min(100, nx));
-        ny = Math.max(0, Math.min(100, ny));
-      }
-      setRectCoords({ x1: anchorX, y1: anchorY, x2: nx, y2: ny });
-    };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  };
-
-  const handleRectMovePointerDown = (e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const start = getSurfacePct(e.clientX, e.clientY);
-    const orig = { ...rectCoords };
-    const minX = Math.min(orig.x1, orig.x2);
-    const maxX = Math.max(orig.x1, orig.x2);
-    const minY = Math.min(orig.y1, orig.y2);
-    const maxY = Math.max(orig.y1, orig.y2);
-    const w = maxX - minX;
-    const h = maxY - minY;
-
-    const onMove = (ev: PointerEvent) => {
-      const curr = getSurfacePct(ev.clientX, ev.clientY);
-      const dx = curr.x - start.x;
-      const dy = curr.y - start.y;
-      const nextMinX = Math.max(0, Math.min(100 - w, minX + dx));
-      const nextMinY = Math.max(0, Math.min(100 - h, minY + dy));
-      setRectCoords({
-        x1: nextMinX,
-        y1: nextMinY,
-        x2: nextMinX + w,
-        y2: nextMinY + h,
-      });
-    };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  };
-
-  const rulerMetrics = useMemo(() => {
-    if (!layout) return null;
-    const gridWcm = layout.totalGridWMm / 10;
-    const gridHcm = layout.totalGridHMm / 10;
-
-    const lineDxCm = ((lineCoords.x2 - lineCoords.x1) / 100) * gridWcm;
-    const lineDyCm = ((lineCoords.y2 - lineCoords.y1) / 100) * gridHcm;
-    const lineLenCm = Math.hypot(lineDxCm, lineDyCm);
-
-    const rectLeftPct = Math.min(rectCoords.x1, rectCoords.x2);
-    const rectTopPct = Math.min(rectCoords.y1, rectCoords.y2);
-    const rectWPct = Math.abs(rectCoords.x2 - rectCoords.x1);
-    const rectHPct = Math.abs(rectCoords.y2 - rectCoords.y1);
-    const rectWCm = (rectWPct / 100) * gridWcm;
-    const rectHCm = (rectHPct / 100) * gridHcm;
-    const rectDiagCm = Math.hypot(rectWCm, rectHCm);
-
-    return {
-      lineLenCm,
-      rectLeftPct,
-      rectTopPct,
-      rectWPct,
-      rectHPct,
-      rectWCm,
-      rectHCm,
-      rectDiagCm,
-    };
-  }, [layout, lineCoords, rectCoords]);
 
   const handleSaveCalibrationProfile = () => {
     const clean = newProfileName.trim();
@@ -735,13 +535,13 @@ export const SliceWorkspace: React.FC<SliceWorkspaceProps> = ({
               className="transition-transform duration-150 origin-center"
               style={{ transform: `scale(${zoom})` }}
             >
-              {/* Total Grid Sheet Surface */}
+              {/* Total Grid Sheet Surface (outer is overflow-visible so ruler handles at edges never clip) */}
               <div
                 ref={gridSurfaceRef}
                 onPointerDown={handleManualImagePointerDown}
-                className={`relative bg-white shadow-lg border border-slate-300 select-none overflow-hidden ${
+                className={`relative bg-white shadow-lg border border-slate-300 select-none overflow-visible ${
                   settings.manualPositioning && !rulerEnabled
-                    ? 'cursor-grab active:cursor-grabbing ring-2 ring-[#2563EB]/40'
+                    ? 'cursor-grab active:cursor-grabbing ring-2 ring-[#2563EB]/40 touch-none'
                     : ''
                 }`}
                 style={{
@@ -752,205 +552,159 @@ export const SliceWorkspace: React.FC<SliceWorkspaceProps> = ({
                       : `min(${Math.round(520 * (layout.totalGridWMm / layout.totalGridHMm))}px, 72vw)`,
                 }}
               >
-                {/* Placed Image Inside Grid */}
-                <ArtworkPreview
-                  processedCanvas={processedCanvas}
-                  originalSrc={activeImageSrc}
-                  useOriginalSrc={!hasActiveFilters}
-                  alt={activeImageName}
-                  className="absolute pointer-events-none select-none"
-                  style={{
-                    left: `${(layout.imgXMm / layout.totalGridWMm) * 100}%`,
-                    top: `${(layout.imgYMm / layout.totalGridHMm) * 100}%`,
-                    width: `${(layout.imgWMm / layout.totalGridWMm) * 100}%`,
-                    height: `${(layout.imgHMm / layout.totalGridHMm) * 100}%`,
-                  }}
-                />
+                {/* Clipped Artwork + Paper Sheet Grid */}
+                <div className="absolute inset-0 overflow-hidden">
+                  {/* Placed Image Inside Grid */}
+                  <ArtworkPreview
+                    processedCanvas={processedCanvas}
+                    originalSrc={activeImageSrc}
+                    useOriginalSrc={!hasActiveFilters}
+                    alt={activeImageName}
+                    className="absolute pointer-events-none select-none"
+                    style={{
+                      left: `${(layout.imgXMm / layout.totalGridWMm) * 100}%`,
+                      top: `${(layout.imgYMm / layout.totalGridHMm) * 100}%`,
+                      width: `${(layout.imgWMm / layout.totalGridWMm) * 100}%`,
+                      height: `${(layout.imgHMm / layout.totalGridHMm) * 100}%`,
+                    }}
+                  />
 
-                {/* Paper Sheet Grid Overlay */}
-                {layout.tiles.map((tile) => {
-                  const isBlank = blankTileIndices.has(tile.index);
-                  const isHovered = hoveredTileIndex === tile.index;
-                  const leftPct = (tile.gridXMm / layout.totalGridWMm) * 100;
-                  const topPct = (tile.gridYMm / layout.totalGridHMm) * 100;
-                  const widthPct = (tile.printableWMm / layout.totalGridWMm) * 100;
-                  const heightPct = (tile.printableHMm / layout.totalGridHMm) * 100;
+                  {/* Paper Sheet Grid Overlay */}
+                  {layout.tiles.map((tile) => {
+                    const isBlank = blankTileIndices.has(tile.index);
+                    const isHovered = hoveredTileIndex === tile.index;
+                    const leftPct = (tile.gridXMm / layout.totalGridWMm) * 100;
+                    const topPct = (tile.gridYMm / layout.totalGridHMm) * 100;
+                    const widthPct = (tile.printableWMm / layout.totalGridWMm) * 100;
+                    const heightPct = (tile.printableHMm / layout.totalGridHMm) * 100;
 
-                  const overlapRightPct =
-                    settings.overlapMm > 0 && tile.col < layout.cols - 1
-                      ? (settings.overlapMm / tile.printableWMm) * 100
-                      : 0;
-                  const overlapBottomPct =
-                    settings.overlapMm > 0 && tile.row < layout.rows - 1
-                      ? (settings.overlapMm / tile.printableHMm) * 100
-                      : 0;
+                    const overlapRightPct =
+                      settings.overlapMm > 0 && tile.col < layout.cols - 1
+                        ? (settings.overlapMm / tile.printableWMm) * 100
+                        : 0;
+                    const overlapBottomPct =
+                      settings.overlapMm > 0 && tile.row < layout.rows - 1
+                        ? (settings.overlapMm / tile.printableHMm) * 100
+                        : 0;
 
-                  return (
-                    <button
-                      key={tile.index}
-                      type="button"
-                      onClick={() => {
-                        if (!settings.manualPositioning && !rulerEnabled) {
-                          setInspectedTile(tile);
+                    return (
+                      <button
+                        key={tile.index}
+                        type="button"
+                        onClick={() => {
+                          if (!settings.manualPositioning && !rulerEnabled) {
+                            setInspectedTile(tile);
+                          }
+                        }}
+                        onMouseEnter={() => setHoveredTileIndex(tile.index)}
+                        onMouseLeave={() => setHoveredTileIndex(null)}
+                        style={{
+                          left: `${leftPct}%`,
+                          top: `${topPct}%`,
+                          width: `${widthPct}%`,
+                          height: `${heightPct}%`,
+                        }}
+                        title={
+                          settings.manualPositioning
+                            ? 'Arraste para posicionar a imagem'
+                            : `Clique para visualizar Folha ${tile.index} (${tile.pageLabel})`
                         }
-                      }}
-                      onMouseEnter={() => setHoveredTileIndex(tile.index)}
-                      onMouseLeave={() => setHoveredTileIndex(null)}
-                      style={{
-                        left: `${leftPct}%`,
-                        top: `${topPct}%`,
-                        width: `${widthPct}%`,
-                        height: `${heightPct}%`,
-                      }}
-                      title={
-                        settings.manualPositioning
-                          ? 'Arraste para posicionar a imagem'
-                          : `Clique para visualizar Folha ${tile.index} (${tile.pageLabel})`
-                      }
-                      className={`absolute border transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E85D04] ${
-                        settings.manualPositioning || rulerEnabled
-                          ? 'pointer-events-none border-slate-800/40'
-                          : isBlank
-                          ? 'cursor-pointer bg-slate-100/75 border-slate-300/80'
-                          : isHovered
-                          ? 'cursor-pointer border-[#E85D04] bg-[#E85D04]/10 z-10'
-                          : 'cursor-pointer border-slate-800/45 hover:border-[#E85D04]'
-                      }`}
-                    >
-                      {overlapRightPct > 0 && (
-                        <div
-                          className="absolute top-0 bottom-0 right-0 bg-[#E85D04]/15 border-l border-dashed border-[#E85D04]/60 pointer-events-none"
-                          style={{ width: `${overlapRightPct}%` }}
-                        />
-                      )}
-                      {overlapBottomPct > 0 && (
-                        <div
-                          className="absolute left-0 right-0 bottom-0 bg-[#E85D04]/15 border-t border-dashed border-[#E85D04]/60 pointer-events-none"
-                          style={{ height: `${overlapBottomPct}%` }}
-                        />
-                      )}
-
-                      <span
-                        className={`inline-flex items-center gap-1 m-1.5 px-1.5 py-0.5 rounded text-[11px] font-mono tabular-nums font-semibold shadow-2xs ${
-                          isBlank
-                            ? 'bg-slate-200 text-slate-600'
-                            : isHovered && !settings.manualPositioning
-                            ? 'bg-[#E85D04] text-white'
-                            : 'bg-white/90 text-slate-900 border border-slate-200/80'
+                        className={`absolute border transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E85D04] ${
+                          settings.manualPositioning || rulerEnabled
+                            ? 'pointer-events-none border-slate-800/40'
+                            : isBlank
+                            ? 'cursor-pointer bg-slate-100/75 border-slate-300/80'
+                            : isHovered
+                            ? 'cursor-pointer border-[#E85D04] bg-[#E85D04]/10 z-10'
+                            : 'cursor-pointer border-slate-800/45 hover:border-[#E85D04]'
                         }`}
                       >
-                        <span>{tile.index}</span>
-                        <span className="opacity-65 hidden sm:inline">{tile.pageLabel}</span>
-                        {isBlank && <span className="text-[10px]">(pulada)</span>}
-                      </span>
+                        {overlapRightPct > 0 && (
+                          <div
+                            className="absolute top-0 bottom-0 right-0 bg-[#E85D04]/15 border-l border-dashed border-[#E85D04]/60 pointer-events-none"
+                            style={{ width: `${overlapRightPct}%` }}
+                          />
+                        )}
+                        {overlapBottomPct > 0 && (
+                          <div
+                            className="absolute left-0 right-0 bottom-0 bg-[#E85D04]/15 border-t border-dashed border-[#E85D04]/60 pointer-events-none"
+                            style={{ height: `${overlapBottomPct}%` }}
+                          />
+                        )}
 
-                      {isHovered && !isBlank && !rulerEnabled && !settings.manualPositioning && (
-                        <span className="absolute bottom-1.5 right-1.5 p-1 bg-white/95 rounded shadow-xs text-slate-700">
-                          <Maximize2 className="w-3 h-3" />
+                        <span
+                          className={`inline-flex items-center gap-1 m-1.5 px-1.5 py-0.5 rounded text-[11px] font-mono tabular-nums font-semibold shadow-2xs ${
+                            isBlank
+                              ? 'bg-slate-200 text-slate-600'
+                              : isHovered && !settings.manualPositioning
+                              ? 'bg-[#E85D04] text-white'
+                              : 'bg-white/90 text-slate-900 border border-slate-200/80'
+                          }`}
+                        >
+                          <span>{tile.index}</span>
+                          <span className="opacity-65 hidden sm:inline">{tile.pageLabel}</span>
+                          {isBlank && <span className="text-[10px]">(pulada)</span>}
                         </span>
-                      )}
-                    </button>
-                  );
-                })}
+
+                        {isHovered && !isBlank && !rulerEnabled && !settings.manualPositioning && (
+                          <span className="absolute bottom-1.5 right-1.5 p-1 bg-white/95 rounded shadow-xs text-slate-700">
+                            <Maximize2 className="w-3 h-3" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {/* Synchronized Round Panel Circular Mask & Cut Guide */}
+                  {settings.panelShape === 'round' &&
+                    layout.circleCenterXMm !== undefined &&
+                    layout.circleCenterYMm !== undefined &&
+                    layout.circleRadiusMm !== undefined && (
+                      <svg
+                        viewBox={`0 0 ${layout.totalGridWMm} ${layout.totalGridHMm}`}
+                        className="absolute inset-0 w-full h-full pointer-events-none"
+                      >
+                        <path
+                          fill="rgba(255, 255, 255, 0.8)"
+                          fillRule="evenodd"
+                          d={`M 0 0 H ${layout.totalGridWMm} V ${layout.totalGridHMm} H 0 Z M ${
+                            layout.circleCenterXMm + layout.circleRadiusMm
+                          } ${layout.circleCenterYMm} A ${layout.circleRadiusMm} ${
+                            layout.circleRadiusMm
+                          } 0 1 0 ${
+                            layout.circleCenterXMm - layout.circleRadiusMm
+                          } ${layout.circleCenterYMm} A ${layout.circleRadiusMm} ${
+                            layout.circleRadiusMm
+                          } 0 1 0 ${
+                            layout.circleCenterXMm + layout.circleRadiusMm
+                          } ${layout.circleCenterYMm} Z`}
+                        />
+                        <circle
+                          cx={layout.circleCenterXMm}
+                          cy={layout.circleCenterYMm}
+                          r={layout.circleRadiusMm}
+                          fill="none"
+                          stroke="#E11D74"
+                          strokeWidth="2.2"
+                          strokeDasharray="6 4"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      </svg>
+                    )}
+                </div>
 
                 {/* Interactive Ruler Overlay (Line & Square/Rectangle modes) */}
-                {rulerEnabled && rulerMetrics && (
-                  <div
-                    onPointerDown={handleRulerSurfacePointerDown}
-                    className="absolute inset-0 z-20 cursor-crosshair select-none"
-                  >
-                    {hasCustomRuler && rulerShape === 'line' && (
-                      <>
-                        <svg
-                          viewBox="0 0 100 100"
-                          preserveAspectRatio="none"
-                          className="absolute inset-0 w-full h-full pointer-events-none"
-                        >
-                          <line
-                            x1={lineCoords.x1}
-                            y1={lineCoords.y1}
-                            x2={lineCoords.x2}
-                            y2={lineCoords.y2}
-                            stroke="#2563EB"
-                            strokeWidth="2.5"
-                            vectorEffect="non-scaling-stroke"
-                          />
-                        </svg>
-
-                        <div
-                          style={{
-                            left: `${(lineCoords.x1 + lineCoords.x2) / 2}%`,
-                            top: `${(lineCoords.y1 + lineCoords.y2) / 2}%`,
-                          }}
-                          className="absolute -translate-x-1/2 -translate-y-1/2 -mt-4 pointer-events-none bg-white/95 text-slate-900 border border-slate-200/90 shadow-md px-2.5 py-0.5 rounded-md font-display text-xs font-bold tabular-nums whitespace-nowrap"
-                        >
-                          {formatCm(rulerMetrics.lineLenCm)}
-                        </div>
-
-                        <div
-                          onPointerDown={(e) => handleLineHandlePointerDown(e, 'start')}
-                          style={{
-                            left: `${lineCoords.x1}%`,
-                            top: `${lineCoords.y1}%`,
-                          }}
-                          title="Arraste para ajustar início da linha"
-                          className="absolute -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-slate-950 border-2 border-[#2563EB] shadow-sm cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
-                        />
-
-                        <div
-                          onPointerDown={(e) => handleLineHandlePointerDown(e, 'end')}
-                          style={{
-                            left: `${lineCoords.x2}%`,
-                            top: `${lineCoords.y2}%`,
-                          }}
-                          title="Arraste para ajustar fim da linha"
-                          className="absolute -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-slate-950 border-2 border-[#2563EB] shadow-sm cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
-                        />
-                      </>
-                    )}
-
-                    {hasCustomRuler && rulerShape === 'rect' && (
-                      <div
-                        onPointerDown={handleRectMovePointerDown}
-                        style={{
-                          left: `${rulerMetrics.rectLeftPct}%`,
-                          top: `${rulerMetrics.rectTopPct}%`,
-                          width: `${rulerMetrics.rectWPct}%`,
-                          height: `${rulerMetrics.rectHPct}%`,
-                        }}
-                        className="absolute border-2 border-[#2563EB] bg-[#2563EB]/12 cursor-move"
-                      >
-                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none bg-white/95 text-slate-900 border border-slate-200/90 shadow-md px-2.5 py-1 rounded-md text-center whitespace-nowrap">
-                          <div className="font-display text-xs font-bold tabular-nums">
-                            {rulerMetrics.rectWCm.toFixed(1).replace('.', ',')} ×{' '}
-                            {rulerMetrics.rectHCm.toFixed(1).replace('.', ',')} cm
-                          </div>
-                          {rulerMetrics.rectWPct > 18 && rulerMetrics.rectHPct > 14 && (
-                            <div className="text-[10px] font-mono tabular-nums text-slate-500">
-                              Diag: {formatCm(rulerMetrics.rectDiagCm)}
-                            </div>
-                          )}
-                        </div>
-
-                        <div
-                          onPointerDown={(e) => handleRectCornerPointerDown(e, 'nw')}
-                          className="absolute -left-1.5 -top-1.5 w-3.5 h-3.5 rounded-full bg-slate-950 border-2 border-[#2563EB] shadow-sm cursor-nwse-resize"
-                        />
-                        <div
-                          onPointerDown={(e) => handleRectCornerPointerDown(e, 'ne')}
-                          className="absolute -right-1.5 -top-1.5 w-3.5 h-3.5 rounded-full bg-slate-950 border-2 border-[#2563EB] shadow-sm cursor-nesw-resize"
-                        />
-                        <div
-                          onPointerDown={(e) => handleRectCornerPointerDown(e, 'sw')}
-                          className="absolute -left-1.5 -bottom-1.5 w-3.5 h-3.5 rounded-full bg-slate-950 border-2 border-[#2563EB] shadow-sm cursor-nesw-resize"
-                        />
-                        <div
-                          onPointerDown={(e) => handleRectCornerPointerDown(e, 'se')}
-                          className="absolute -right-1.5 -bottom-1.5 w-3.5 h-3.5 rounded-full bg-slate-950 border-2 border-[#2563EB] shadow-sm cursor-nwse-resize"
-                        />
-                      </div>
-                    )}
-                  </div>
+                {rulerEnabled && hasCustomRuler && (
+                  <InteractiveRulerOverlay
+                    layout={layout}
+                    surfaceRef={gridSurfaceRef}
+                    rulerShape={rulerShape}
+                    lineCoords={lineCoords}
+                    rectCoords={rectCoords}
+                    onChangeLineCoords={setLineCoords}
+                    onChangeRectCoords={setRectCoords}
+                    accentColor="#2563EB"
+                  />
                 )}
               </div>
             </div>

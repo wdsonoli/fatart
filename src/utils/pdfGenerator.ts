@@ -63,7 +63,15 @@ export async function generatePosterPdf(
     doc.setFontSize(10);
     doc.setTextColor(71, 85, 105);
     const paperName = getPaperSpecLabel(settings).shortLabel;
-    const summaryLine = `Grade: ${cols} colunas × ${rows} linhas (${activeTiles.length} folhas ${paperName})  |  Tamanho da arte: ${(layout.imgWMm / 10).toFixed(1)} × ${(layout.imgHMm / 10).toFixed(1)} cm  |  Sobreposição: ${settings.overlapMm} mm`;
+    const isRound =
+      settings.panelShape === 'round' &&
+      layout.circleCenterXMm !== undefined &&
+      layout.circleCenterYMm !== undefined &&
+      layout.circleRadiusMm !== undefined;
+    const sizeSummary = isRound
+      ? `Painel Redondo Ø ${((layout.circleRadiusMm! * 2) / 10).toFixed(1)} cm`
+      : `Tamanho da arte: ${(layout.imgWMm / 10).toFixed(1)} × ${(layout.imgHMm / 10).toFixed(1)} cm`;
+    const summaryLine = `Grade: ${cols} colunas × ${rows} linhas (${activeTiles.length} folhas ${paperName})  |  ${sizeSummary}  |  Sobreposição: ${settings.overlapMm} mm`;
     doc.text(summaryLine, pad, 27);
 
     const availW = pageWMm - pad * 2;
@@ -76,26 +84,61 @@ export async function generatePosterPdf(
     const originY = 36 + (availH - drawH) / 2;
 
     const previewCanvas = document.createElement('canvas');
-    const previewScale = Math.min(
-      1,
-      900 / Math.max(processedCanvas.width, processedCanvas.height)
-    );
-    previewCanvas.width = Math.max(1, Math.round(processedCanvas.width * previewScale));
-    previewCanvas.height = Math.max(1, Math.round(processedCanvas.height * previewScale));
+    const previewPxW = Math.min(1000, Math.max(240, Math.round(drawW * 4)));
+    const previewPxH = Math.min(1000, Math.max(240, Math.round(drawH * 4)));
+    previewCanvas.width = previewPxW;
+    previewCanvas.height = previewPxH;
     const pCtx = previewCanvas.getContext('2d');
     if (pCtx) {
       pCtx.fillStyle = '#ffffff';
-      pCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
-      pCtx.drawImage(processedCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
-      const previewDataUrl = previewCanvas.toDataURL('image/jpeg', 0.85);
-      doc.addImage(
-        previewDataUrl,
-        'JPEG',
-        originX + layout.imgXMm * scale,
-        originY + layout.imgYMm * scale,
-        layout.imgWMm * scale,
-        layout.imgHMm * scale
+      pCtx.fillRect(0, 0, previewPxW, previewPxH);
+      const pxPerMmPreviewX = previewPxW / layout.totalGridWMm;
+      const pxPerMmPreviewY = previewPxH / layout.totalGridHMm;
+
+      pCtx.save();
+      if (isRound) {
+        pCtx.beginPath();
+        pCtx.ellipse(
+          layout.circleCenterXMm! * pxPerMmPreviewX,
+          layout.circleCenterYMm! * pxPerMmPreviewY,
+          layout.circleRadiusMm! * pxPerMmPreviewX,
+          layout.circleRadiusMm! * pxPerMmPreviewY,
+          0,
+          0,
+          Math.PI * 2
+        );
+        pCtx.clip();
+      }
+      pCtx.drawImage(
+        processedCanvas,
+        layout.imgXMm * pxPerMmPreviewX,
+        layout.imgYMm * pxPerMmPreviewY,
+        layout.imgWMm * pxPerMmPreviewX,
+        layout.imgHMm * pxPerMmPreviewY
       );
+      pCtx.restore();
+
+      if (isRound) {
+        pCtx.save();
+        pCtx.strokeStyle = '#E11D74';
+        pCtx.lineWidth = Math.max(2, previewPxW * 0.004);
+        pCtx.setLineDash([8, 5]);
+        pCtx.beginPath();
+        pCtx.ellipse(
+          layout.circleCenterXMm! * pxPerMmPreviewX,
+          layout.circleCenterYMm! * pxPerMmPreviewY,
+          layout.circleRadiusMm! * pxPerMmPreviewX,
+          layout.circleRadiusMm! * pxPerMmPreviewY,
+          0,
+          0,
+          Math.PI * 2
+        );
+        pCtx.stroke();
+        pCtx.restore();
+      }
+
+      const previewDataUrl = previewCanvas.toDataURL('image/jpeg', 0.88);
+      doc.addImage(previewDataUrl, 'JPEG', originX, originY, drawW, drawH);
     }
 
     doc.setLineWidth(0.3);
@@ -157,6 +200,26 @@ export async function generatePosterPdf(
       tileCtx.fillRect(0, 0, finalW, finalH);
       tileCtx.imageSmoothingEnabled = true;
       tileCtx.imageSmoothingQuality = 'high';
+
+      const isRoundTile =
+        settings.panelShape === 'round' &&
+        layout.circleCenterXMm !== undefined &&
+        layout.circleCenterYMm !== undefined &&
+        layout.circleRadiusMm !== undefined;
+
+      tileCtx.save();
+      if (isRoundTile) {
+        const cxPageMm = marginMm + (layout.circleCenterXMm! - tile.gridXMm);
+        const cyPageMm = marginMm + (layout.circleCenterYMm! - tile.gridYMm);
+        const cxPx = ((cxPageMm - tile.destXMm) / tile.destWMm) * finalW;
+        const cyPx = ((cyPageMm - tile.destYMm) / tile.destHMm) * finalH;
+        const rxPx = (layout.circleRadiusMm! / tile.destWMm) * finalW;
+        const ryPx = (layout.circleRadiusMm! / tile.destHMm) * finalH;
+        tileCtx.beginPath();
+        tileCtx.ellipse(cxPx, cyPx, rxPx, ryPx, 0, 0, Math.PI * 2);
+        tileCtx.clip();
+      }
+
       tileCtx.drawImage(
         processedCanvas,
         tile.srcX,
@@ -168,6 +231,27 @@ export async function generatePosterPdf(
         finalW,
         finalH
       );
+      tileCtx.restore();
+
+      if (isRoundTile && settings.showCutMarks) {
+        const cxPageMm = marginMm + (layout.circleCenterXMm! - tile.gridXMm);
+        const cyPageMm = marginMm + (layout.circleCenterYMm! - tile.gridYMm);
+        const cxPx = ((cxPageMm - tile.destXMm) / tile.destWMm) * finalW;
+        const cyPx = ((cyPageMm - tile.destYMm) / tile.destHMm) * finalH;
+        const rxPx = (layout.circleRadiusMm! / tile.destWMm) * finalW;
+        const ryPx = (layout.circleRadiusMm! / tile.destHMm) * finalH;
+        tileCtx.save();
+        tileCtx.strokeStyle = '#E11D74';
+        tileCtx.lineWidth = Math.max(2, finalW * 0.0024);
+        tileCtx.setLineDash([
+          Math.max(8, finalW * 0.014),
+          Math.max(5, finalW * 0.009),
+        ]);
+        tileCtx.beginPath();
+        tileCtx.ellipse(cxPx, cyPx, rxPx, ryPx, 0, 0, Math.PI * 2);
+        tileCtx.stroke();
+        tileCtx.restore();
+      }
 
       const tileDataUrl = tileCanvas.toDataURL('image/jpeg', 0.92);
       doc.addImage(

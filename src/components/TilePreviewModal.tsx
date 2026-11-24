@@ -38,8 +38,23 @@ export const TilePreviewModal: React.FC<TilePreviewModalProps> = ({
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, w, h);
 
+    const isRoundTile =
+      settings.panelShape === 'round' &&
+      layout.circleCenterXMm !== undefined &&
+      layout.circleCenterYMm !== undefined &&
+      layout.circleRadiusMm !== undefined;
+
     // Draw tile slice
     if (tile.hasIntersection && tile.srcW > 0.5 && tile.srcH > 0.5) {
+      ctx.save();
+      if (isRoundTile) {
+        const cxPx = (settings.marginMm + (layout.circleCenterXMm! - tile.gridXMm)) * pxPerMm;
+        const cyPx = (settings.marginMm + (layout.circleCenterYMm! - tile.gridYMm)) * pxPerMm;
+        const rPx = layout.circleRadiusMm! * pxPerMm;
+        ctx.beginPath();
+        ctx.arc(cxPx, cyPx, rPx, 0, Math.PI * 2);
+        ctx.clip();
+      }
       ctx.drawImage(
         processedCanvas,
         tile.srcX,
@@ -51,6 +66,29 @@ export const TilePreviewModal: React.FC<TilePreviewModalProps> = ({
         tile.destWMm * pxPerMm,
         tile.destHMm * pxPerMm
       );
+      ctx.restore();
+
+      if (isRoundTile && settings.showCutMarks) {
+        const cxPx = (settings.marginMm + (layout.circleCenterXMm! - tile.gridXMm)) * pxPerMm;
+        const cyPx = (settings.marginMm + (layout.circleCenterYMm! - tile.gridYMm)) * pxPerMm;
+        const rPx = layout.circleRadiusMm! * pxPerMm;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(
+          settings.marginMm * pxPerMm,
+          settings.marginMm * pxPerMm,
+          tile.printableWMm * pxPerMm,
+          tile.printableHMm * pxPerMm
+        );
+        ctx.clip();
+        ctx.strokeStyle = '#E11D74';
+        ctx.lineWidth = 1.6;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.arc(cxPx, cyPx, rPx, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
 
     const marginPx = settings.marginMm * pxPerMm;

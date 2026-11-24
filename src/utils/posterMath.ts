@@ -117,7 +117,31 @@ function computeFitForOrientation(
   let imgWMm: number;
   let imgHMm: number;
 
-  if (settings.sizingMode === 'physical') {
+  const isRound = settings.panelShape === 'round';
+  const roundDiameterMm = Math.max(
+    100,
+    Math.min(3000, (settings.roundDiameterCm || 50) * 10)
+  );
+
+  if (isRound && settings.sizingMode === 'physical') {
+    // Round panel of exact diameter: cover-fit the artwork so the circle has no empty bars
+    if (imgAspect >= 1) {
+      imgHMm = roundDiameterMm;
+      imgWMm = roundDiameterMm * imgAspect;
+    } else {
+      imgWMm = roundDiameterMm;
+      imgHMm = roundDiameterMm / imgAspect;
+    }
+
+    cols =
+      roundDiameterMm <= printableWMm + 0.01
+        ? 1
+        : Math.max(1, Math.ceil((roundDiameterMm - overlapMm) / stepWMm));
+    rows =
+      roundDiameterMm <= printableHMm + 0.01
+        ? 1
+        : Math.max(1, Math.ceil((roundDiameterMm - overlapMm) / stepHMm));
+  } else if (settings.sizingMode === 'physical') {
     imgWMm = Math.max(10, settings.targetWidthCm * 10);
     imgHMm = settings.lockAspectRatio
       ? imgWMm / imgAspect
@@ -155,19 +179,33 @@ function computeFitForOrientation(
     // 'free_grid': user controls cols and rows directly
     const gridW = cols * printableWMm - (cols - 1) * overlapMm;
     const gridH = rows * printableHMm - (rows - 1) * overlapMm;
-    const gridAspect = gridW / gridH;
-    if (imgAspect > gridAspect) {
-      imgWMm = gridW;
-      imgHMm = gridW / imgAspect;
+    if (isRound) {
+      const circleDiam = Math.min(roundDiameterMm, Math.min(gridW, gridH));
+      if (imgAspect >= 1) {
+        imgHMm = circleDiam;
+        imgWMm = circleDiam * imgAspect;
+      } else {
+        imgWMm = circleDiam;
+        imgHMm = circleDiam / imgAspect;
+      }
     } else {
-      imgHMm = gridH;
-      imgWMm = gridH * imgAspect;
+      const gridAspect = gridW / gridH;
+      if (imgAspect > gridAspect) {
+        imgWMm = gridW;
+        imgHMm = gridW / imgAspect;
+      } else {
+        imgHMm = gridH;
+        imgWMm = gridH * imgAspect;
+      }
     }
   }
 
   const totalGridWMm = cols * printableWMm - (cols - 1) * overlapMm;
   const totalGridHMm = rows * printableHMm - (rows - 1) * overlapMm;
-  const fillEfficiency = (imgWMm * imgHMm) / (totalGridWMm * totalGridHMm);
+  const fillEfficiency = isRound
+    ? (Math.PI * Math.pow(Math.min(roundDiameterMm, totalGridWMm, totalGridHMm) / 2, 2)) /
+      (totalGridWMm * totalGridHMm)
+    : (imgWMm * imgHMm) / (totalGridWMm * totalGridHMm);
 
   return {
     orientation,
@@ -244,6 +282,17 @@ export function calculatePosterLayout(
   const imgRightMm = imgXMm + imgWMm;
   const imgBottomMm = imgYMm + imgHMm;
 
+  const isRound = settings.panelShape === 'round';
+  const requestedRoundDiamMm = Math.max(
+    100,
+    Math.min(3000, (settings.roundDiameterCm || 50) * 10)
+  );
+  const circleCenterXMm = isRound ? totalGridWMm / 2 : undefined;
+  const circleCenterYMm = isRound ? totalGridHMm / 2 : undefined;
+  const circleRadiusMm = isRound
+    ? Math.min(requestedRoundDiamMm / 2, Math.min(totalGridWMm, totalGridHMm) / 2)
+    : undefined;
+
   const tiles: TileSlice[] = [];
   let seq = 1;
 
@@ -261,7 +310,24 @@ export function calculatePosterLayout(
 
       const interW = interRight - interLeft;
       const interH = interBottom - interTop;
-      const hasIntersection = interW > 0.4 && interH > 0.4;
+      let hasIntersection = interW > 0.4 && interH > 0.4;
+
+      if (
+        hasIntersection &&
+        isRound &&
+        circleCenterXMm !== undefined &&
+        circleCenterYMm !== undefined &&
+        circleRadiusMm !== undefined
+      ) {
+        const closestX = Math.max(gridXMm, Math.min(circleCenterXMm, tileRightMm));
+        const closestY = Math.max(gridYMm, Math.min(circleCenterYMm, tileBottomMm));
+        const distSq =
+          (closestX - circleCenterXMm) * (closestX - circleCenterXMm) +
+          (closestY - circleCenterYMm) * (closestY - circleCenterYMm);
+        if (distSq > (circleRadiusMm + 0.5) * (circleRadiusMm + 0.5)) {
+          hasIntersection = false;
+        }
+      }
 
       const destXMm = marginMm + (interLeft - gridXMm);
       const destYMm = marginMm + (interTop - gridYMm);
@@ -318,6 +384,9 @@ export function calculatePosterLayout(
     imgHMm,
     estimatedDpi,
     tiles,
+    circleCenterXMm,
+    circleCenterYMm,
+    circleRadiusMm,
   };
 }
 

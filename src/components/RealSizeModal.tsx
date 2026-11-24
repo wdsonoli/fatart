@@ -45,6 +45,15 @@ export const RealSizeModal: React.FC<RealSizeModalProps> = ({
 
   const posterWCm = layout.totalGridWMm / 10;
   const posterHCm = layout.totalGridHMm / 10;
+  const isRoundPanel =
+    settings.panelShape === 'round' &&
+    layout.circleCenterXMm !== undefined &&
+    layout.circleCenterYMm !== undefined &&
+    layout.circleRadiusMm !== undefined;
+  const roundDiameterCm =
+    isRoundPanel && layout.circleRadiusMm
+      ? (layout.circleRadiusMm * 2) / 10
+      : settings.roundDiameterCm;
   const artWCm = layout.imgWMm / 10;
   const artHCm = layout.imgHMm / 10;
   const paperSpec = getPaperSpecLabel(settings);
@@ -84,9 +93,10 @@ export const RealSizeModal: React.FC<RealSizeModalProps> = ({
                 Ver em Tamanho Real
               </h2>
               <p className="text-xs text-slate-500 tabular-nums">
-                Pôster: {posterWCm.toFixed(1)} × {posterHCm.toFixed(1)} cm · Arte:{' '}
-                {artWCm.toFixed(1)} × {artHCm.toFixed(1)} cm · {layout.cols}×{layout.rows}{' '}
-                {paperSpec.shortLabel}
+                {isRoundPanel
+                  ? `Painel Redondo Ø ${roundDiameterCm.toFixed(1)} cm`
+                  : `Pôster: ${posterWCm.toFixed(1)} × ${posterHCm.toFixed(1)} cm · Arte: ${artWCm.toFixed(1)} × ${artHCm.toFixed(1)} cm`}{' '}
+                · {layout.cols}×{layout.rows} {paperSpec.shortLabel}
               </p>
             </div>
           </div>
@@ -257,15 +267,52 @@ export const RealSizeModal: React.FC<RealSizeModalProps> = ({
                         }}
                       />
                     ))}
+                    {isRoundPanel &&
+                      layout.circleCenterXMm !== undefined &&
+                      layout.circleCenterYMm !== undefined &&
+                      layout.circleRadiusMm !== undefined && (
+                        <svg
+                          viewBox={`0 0 ${layout.totalGridWMm} ${layout.totalGridHMm}`}
+                          className="absolute inset-0 w-full h-full pointer-events-none"
+                        >
+                          <path
+                            fill="rgba(255, 255, 255, 0.9)"
+                            fillRule="evenodd"
+                            d={`M 0 0 H ${layout.totalGridWMm} V ${layout.totalGridHMm} H 0 Z M ${
+                              layout.circleCenterXMm + layout.circleRadiusMm
+                            } ${layout.circleCenterYMm} A ${layout.circleRadiusMm} ${
+                              layout.circleRadiusMm
+                            } 0 1 0 ${
+                              layout.circleCenterXMm - layout.circleRadiusMm
+                            } ${layout.circleCenterYMm} A ${layout.circleRadiusMm} ${
+                              layout.circleRadiusMm
+                            } 0 1 0 ${
+                              layout.circleCenterXMm + layout.circleRadiusMm
+                            } ${layout.circleCenterYMm} Z`}
+                          />
+                          <circle
+                            cx={layout.circleCenterXMm}
+                            cy={layout.circleCenterYMm}
+                            r={layout.circleRadiusMm}
+                            fill="none"
+                            stroke="#E11D74"
+                            strokeWidth="2"
+                            strokeDasharray="5 3"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        </svg>
+                      )}
                   </div>
 
                   <div className="px-2 py-0.5 rounded-full bg-[#E11D74] text-white text-[11px] font-mono tabular-nums font-bold shadow-xs">
-                    {posterHCm.toFixed(1)} cm
+                    {isRoundPanel ? `Ø ${roundDiameterCm.toFixed(0)} cm` : `${posterHCm.toFixed(1)} cm`}
                   </div>
                 </div>
 
                 <span className="mt-2.5 text-xs font-semibold text-slate-800 tabular-nums">
-                  Seu pôster ({layout.cols}×{layout.rows} folhas {paperSpec.shortLabel})
+                  {isRoundPanel
+                    ? `Painel Redondo Ø ${roundDiameterCm.toFixed(0)} cm (${layout.tiles.filter((t) => t.hasIntersection).length} folhas ${paperSpec.shortLabel})`
+                    : `Seu pôster (${layout.cols}×${layout.rows} folhas ${paperSpec.shortLabel})`}
                 </span>
               </div>
             </div>
@@ -341,6 +388,41 @@ export const RealSizeModal: React.FC<RealSizeModalProps> = ({
                     </span>
                   </div>
                 ))}
+                {isRoundPanel &&
+                  layout.circleCenterXMm !== undefined &&
+                  layout.circleCenterYMm !== undefined &&
+                  layout.circleRadiusMm !== undefined && (
+                    <svg
+                      viewBox={`0 0 ${layout.totalGridWMm} ${layout.totalGridHMm}`}
+                      className="absolute inset-0 w-full h-full pointer-events-none"
+                    >
+                      <path
+                        fill="rgba(255, 255, 255, 0.85)"
+                        fillRule="evenodd"
+                        d={`M 0 0 H ${layout.totalGridWMm} V ${layout.totalGridHMm} H 0 Z M ${
+                          layout.circleCenterXMm + layout.circleRadiusMm
+                        } ${layout.circleCenterYMm} A ${layout.circleRadiusMm} ${
+                          layout.circleRadiusMm
+                        } 0 1 0 ${
+                          layout.circleCenterXMm - layout.circleRadiusMm
+                        } ${layout.circleCenterYMm} A ${layout.circleRadiusMm} ${
+                          layout.circleRadiusMm
+                        } 0 1 0 ${
+                          layout.circleCenterXMm + layout.circleRadiusMm
+                        } ${layout.circleCenterYMm} Z`}
+                      />
+                      <circle
+                        cx={layout.circleCenterXMm}
+                        cy={layout.circleCenterYMm}
+                        r={layout.circleRadiusMm}
+                        fill="none"
+                        stroke="#E11D74"
+                        strokeWidth="2.5"
+                        strokeDasharray="7 4"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </svg>
+                  )}
               </div>
             </div>
           </div>

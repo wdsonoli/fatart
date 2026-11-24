@@ -58,13 +58,20 @@ function renderAssemblyMapToCanvas(
   ctx.font = `700 ${Math.round(5.4 * pxPerMm)}px "Plus Jakarta Sans", sans-serif`;
   ctx.fillText('Mapa de Montagem — FatiArt Studio', pad, 20 * pxPerMm);
 
+  const isRound =
+    settings.panelShape === 'round' &&
+    layout.circleCenterXMm !== undefined &&
+    layout.circleCenterYMm !== undefined &&
+    layout.circleRadiusMm !== undefined;
+
   ctx.fillStyle = '#475569';
   ctx.font = `400 ${Math.round(3.4 * pxPerMm)}px "DM Sans", sans-serif`;
   const paperName = getPaperSpecLabel(settings).shortLabel;
+  const dimsInfo = isRound
+    ? `Painel Redondo Ø ${((layout.circleRadiusMm! * 2) / 10).toFixed(1)} cm`
+    : `${(layout.imgWMm / 10).toFixed(1)}×${(layout.imgHMm / 10).toFixed(1)} cm`;
   ctx.fillText(
-    `Grade: ${layout.cols}×${layout.rows} (${activeTiles.length} folhas ${paperName}) · ${(
-      layout.imgWMm / 10
-    ).toFixed(1)}×${(layout.imgHMm / 10).toFixed(1)} cm · Sobreposição ${
+    `Grade: ${layout.cols}×${layout.rows} (${activeTiles.length} folhas ${paperName}) · ${dimsInfo} · Sobreposição ${
       settings.overlapMm
     } mm`,
     pad,
@@ -80,6 +87,18 @@ function renderAssemblyMapToCanvas(
   const originX = (w - drawW) / 2;
   const originY = 36 * pxPerMm + (availH - drawH) / 2;
 
+  ctx.save();
+  if (isRound) {
+    ctx.beginPath();
+    ctx.arc(
+      originX + layout.circleCenterXMm! * scale,
+      originY + layout.circleCenterYMm! * scale,
+      layout.circleRadiusMm! * scale,
+      0,
+      Math.PI * 2
+    );
+    ctx.clip();
+  }
   ctx.drawImage(
     processedCanvas,
     originX + layout.imgXMm * scale,
@@ -87,6 +106,24 @@ function renderAssemblyMapToCanvas(
     layout.imgWMm * scale,
     layout.imgHMm * scale
   );
+  ctx.restore();
+
+  if (isRound) {
+    ctx.save();
+    ctx.strokeStyle = '#E11D74';
+    ctx.lineWidth = Math.max(1.2, 0.5 * pxPerMm);
+    ctx.setLineDash([5, 3]);
+    ctx.beginPath();
+    ctx.arc(
+      originX + layout.circleCenterXMm! * scale,
+      originY + layout.circleCenterYMm! * scale,
+      layout.circleRadiusMm! * scale,
+      0,
+      Math.PI * 2
+    );
+    ctx.stroke();
+    ctx.restore();
+  }
 
   for (const tile of layout.tiles) {
     const rx = originX + tile.gridXMm * scale;
@@ -132,7 +169,22 @@ function renderTileToCanvas(
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
+  const isRoundTile =
+    settings.panelShape === 'round' &&
+    layout.circleCenterXMm !== undefined &&
+    layout.circleCenterYMm !== undefined &&
+    layout.circleRadiusMm !== undefined;
+
   if (tile.hasIntersection && tile.srcW > 0.5 && tile.srcH > 0.5) {
+    ctx.save();
+    if (isRoundTile) {
+      const cxPx = (settings.marginMm + (layout.circleCenterXMm! - tile.gridXMm)) * pxPerMm;
+      const cyPx = (settings.marginMm + (layout.circleCenterYMm! - tile.gridYMm)) * pxPerMm;
+      const rPx = layout.circleRadiusMm! * pxPerMm;
+      ctx.beginPath();
+      ctx.arc(cxPx, cyPx, rPx, 0, Math.PI * 2);
+      ctx.clip();
+    }
     ctx.drawImage(
       processedCanvas,
       tile.srcX,
@@ -144,6 +196,29 @@ function renderTileToCanvas(
       tile.destWMm * pxPerMm,
       tile.destHMm * pxPerMm
     );
+    ctx.restore();
+
+    if (isRoundTile && settings.showCutMarks) {
+      const cxPx = (settings.marginMm + (layout.circleCenterXMm! - tile.gridXMm)) * pxPerMm;
+      const cyPx = (settings.marginMm + (layout.circleCenterYMm! - tile.gridYMm)) * pxPerMm;
+      const rPx = layout.circleRadiusMm! * pxPerMm;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(
+        settings.marginMm * pxPerMm,
+        settings.marginMm * pxPerMm,
+        tile.printableWMm * pxPerMm,
+        tile.printableHMm * pxPerMm
+      );
+      ctx.clip();
+      ctx.strokeStyle = '#E11D74';
+      ctx.lineWidth = Math.max(1.2, 0.45 * pxPerMm);
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      ctx.arc(cxPx, cyPx, rPx, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   const marginPx = settings.marginMm * pxPerMm;
